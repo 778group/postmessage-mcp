@@ -57,8 +57,10 @@ export class PostMessageServerTransport implements Transport {
         const [protocol, rest] = allowed.split("://");
         if (rest.startsWith("*.")) {
           const domain = rest.slice(2);
-          if (origin.startsWith(protocol + "://") && 
-              (origin.endsWith(domain) || origin.endsWith("." + domain))) {
+          if (
+            origin.startsWith(protocol + "://") &&
+            (origin.endsWith(domain) || origin.endsWith("." + domain))
+          ) {
             return true;
           }
         }
@@ -72,6 +74,14 @@ export class PostMessageServerTransport implements Transport {
    * 获取目标窗口
    */
   private getTargetWindow(): Window {
+    // 支持 'parent' 模式：Server 在 iframe 中运行，与父窗口通信
+    if (this.options.target === "parent") {
+      if (window === window.parent) {
+        throw new Error("使用 'parent' 模式时，Server 必须在 iframe 中运行");
+      }
+      return window.parent;
+    }
+
     if (this.options.target instanceof HTMLIFrameElement) {
       if (!this.options.target.contentWindow) {
         throw new Error("iframe contentWindow 不可用");
@@ -96,7 +106,7 @@ export class PostMessageServerTransport implements Transport {
       try {
         this.listener.cancel();
       } catch (err) {
-        // 忽略取消错误
+        console.error("取消监听器失败:", err);
       }
       this.listener = null;
     }
@@ -110,7 +120,10 @@ export class PostMessageServerTransport implements Transport {
           // 检查 origin 白名单
           if (!this.isOriginAllowed(origin)) {
             console.warn(`拒绝来自未授权域名的消息: ${origin}`);
-            return Promise.resolve({ received: false, error: "Origin not allowed" });
+            return Promise.resolve({
+              received: false,
+              error: "Origin not allowed",
+            });
           }
 
           if (this.onmessage) {

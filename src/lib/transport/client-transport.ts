@@ -10,22 +10,30 @@ import { MCP_MESSAGE_EVENT, type ClientTransportOptions } from "./types.js";
 /**
  * 基于 PostMessage 的 Client Transport
  * 用于 iframe 与主页面之间的 MCP 通信
+ *
+ * 支持两种模式：
+ * 1. 默认模式：Client 在 iframe 中运行，与父窗口的 Server 通信
+ * 2. 反向模式：Client 在主页面中运行，与 iframe 中的 Server 通信（通过指定 target）
  */
 export class PostMessageClientTransport implements Transport {
-  private parentWindow: Window;
+  private targetWindow: Window;
   private targetOrigin: string;
   private allowedOrigins: string[] | undefined;
   private listener: ReturnType<typeof postRobot.on> | null = null;
   private started = false;
+  private isReverseMode = false;
 
   onmessage?: (message: JSONRPCMessage) => void;
   onerror?: (error: Error) => void;
   onclose?: () => void;
 
   constructor(options: ClientTransportOptions = {}) {
-    this.parentWindow = options.parent ?? window.parent;
+    // 支持新的 target 参数，同时兼容旧的 parent 参数
+    this.targetWindow = options.target ?? options.parent ?? window.parent;
     this.targetOrigin = options.targetOrigin ?? "*";
     this.allowedOrigins = options.allowedOrigins;
+    // 如果明确指定了 target，则为反向模式
+    this.isReverseMode = !!(options.target && options.target !== window.parent);
   }
 
   /**
@@ -56,8 +64,10 @@ export class PostMessageClientTransport implements Transport {
         const [protocol, rest] = allowed.split("://");
         if (rest.startsWith("*.")) {
           const domain = rest.slice(2);
-          if (origin.startsWith(protocol + "://") && 
-              (origin.endsWith(domain) || origin.endsWith("." + domain))) {
+          if (
+            origin.startsWith(protocol + "://") &&
+            (origin.endsWith(domain) || origin.endsWith("." + domain))
+          ) {
             return true;
           }
         }
@@ -75,9 +85,11 @@ export class PostMessageClientTransport implements Transport {
       return;
     }
 
-    // 检查是否在 iframe 中
-    if (window === window.parent && !this.parentWindow) {
-      throw new Error("Client Transport 必须在 iframe 中运行");
+    // 仅在默认模式（非反向模式）下检查是否在 iframe 中
+    if (!this.isReverseMode && window === window.parent) {
+      throw new Error(
+        "Client Transport 默认模式必须在 iframe 中运行，或使用 target 参数指定目标窗口"
+      );
     }
 
     // 清理可能存在的旧监听器
@@ -85,24 +97,27 @@ export class PostMessageClientTransport implements Transport {
       try {
         this.listener.cancel();
       } catch (err) {
-        // 忽略取消错误
+        console.error("取消监听器失败:", err);
       }
       this.listener = null;
     }
 
-    // 等待一小段时间，确保父窗口的 Server 已经准备好监听
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // 等待一小段时间，确保目标窗口的 Server 已经准备好监听
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     try {
       // 监听来自 Server 的消息
       this.listener = postRobot.on(
         MCP_MESSAGE_EVENT,
-        { window: this.parentWindow, domain: this.targetOrigin },
+        { window: this.targetWindow, domain: this.targetOrigin },
         ({ origin, data }) => {
           // 检查 origin 白名单
           if (!this.isOriginAllowed(origin)) {
             console.warn(`拒绝来自未授权域名的消息: ${origin}`);
-            return Promise.resolve({ received: false, error: "Origin not allowed" });
+            return Promise.resolve({
+              received: false,
+              error: "Origin not allowed",
+            });
           }
 
           if (this.onmessage) {
@@ -131,7 +146,7 @@ export class PostMessageClientTransport implements Transport {
     }
 
     try {
-      await postRobot.send(this.parentWindow, MCP_MESSAGE_EVENT, message, {
+      await postRobot.send(this.targetWindow, MCP_MESSAGE_EVENT, message, {
         domain: this.targetOrigin,
       });
     } catch (error) {

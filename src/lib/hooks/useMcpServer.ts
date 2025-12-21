@@ -2,7 +2,7 @@
  * MCP Server React Hook
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   McpServer,
   type McpServerOptions,
@@ -16,13 +16,18 @@ import {
  */
 export interface UseMcpServerOptions extends McpServerOptions {
   /**
-   * iframe 元素的 ref
+   * iframe 元素的 ref（主页面模式使用）
    */
   iframeRef?: React.RefObject<HTMLIFrameElement | null>;
   /**
    * 目标窗口（如果不使用 iframeRef）
    */
   targetWindow?: Window;
+  /**
+   * 是否在 iframe 中运行（反向模式）
+   * 设为 true 时，Server 在 iframe 中运行，与父窗口的 Client 通信
+   */
+  asIframe?: boolean;
   /**
    * 允许的 origin
    */
@@ -96,18 +101,15 @@ export function useMcpServer(options: UseMcpServerOptions): UseMcpServerReturn {
   const {
     iframeRef,
     targetWindow,
+    asIframe = false,
     targetOrigin,
     allowedOrigins,
     autoConnect = true,
     ...serverOptions
   } = options;
 
-  // 使用 ref 保存 server 实例，避免重复创建
-  const serverRef = useRef<McpServer | null>(null);
-  if (!serverRef.current) {
-    serverRef.current = new McpServer(serverOptions);
-  }
-  const server = serverRef.current;
+  // 使用 useState 保存 server 实例，避免重复创建
+  const [server] = useState<McpServer>(() => new McpServer(serverOptions));
 
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -117,9 +119,16 @@ export function useMcpServer(options: UseMcpServerOptions): UseMcpServerReturn {
     try {
       setError(null);
 
-      const target = targetWindow ?? iframeRef?.current;
-      if (!target) {
-        throw new Error("未指定目标 iframe 或窗口");
+      // 确定目标：asIframe 模式使用 'parent'，否则使用 iframe 或 window
+      let target: HTMLIFrameElement | Window | "parent";
+      if (asIframe) {
+        target = "parent";
+      } else {
+        const resolvedTarget = targetWindow ?? iframeRef?.current;
+        if (!resolvedTarget) {
+          throw new Error("未指定目标 iframe 或窗口");
+        }
+        target = resolvedTarget;
       }
 
       await server.connect(target, { targetOrigin, allowedOrigins });
@@ -130,7 +139,7 @@ export function useMcpServer(options: UseMcpServerOptions): UseMcpServerReturn {
       setIsConnected(false);
       throw error;
     }
-  }, [server, iframeRef, targetWindow, targetOrigin, allowedOrigins]);
+  }, [server, iframeRef, targetWindow, asIframe, targetOrigin, allowedOrigins]);
 
   // 断开连接函数
   const disconnect = useCallback(async () => {
@@ -190,6 +199,20 @@ export function useMcpServer(options: UseMcpServerOptions): UseMcpServerReturn {
   useEffect(() => {
     if (!autoConnect) return;
 
+    // asIframe 模式：Server 在 iframe 中运行
+    if (asIframe) {
+      // 检查是否在 iframe 中
+      if (window === window.parent) {
+        console.warn("asIframe 模式需要在 iframe 中运行");
+        return;
+      }
+      setTimeout(() => {
+        connect().catch(console.error);
+      }, 0);
+      return;
+    }
+
+    // 默认模式：需要 target
     const target = targetWindow ?? iframeRef?.current;
     if (!target) return;
 
@@ -198,20 +221,26 @@ export function useMcpServer(options: UseMcpServerOptions): UseMcpServerReturn {
       const iframe = iframeRef.current;
 
       const handleLoad = () => {
-        connect().catch(console.error);
+        setTimeout(() => {
+          connect().catch(console.error);
+        }, 0);
       };
 
       // 如果 iframe 已经加载完成
       if (iframe.contentDocument?.readyState === "complete") {
-        connect().catch(console.error);
+        setTimeout(() => {
+          connect().catch(console.error);
+        }, 0);
       } else {
         iframe.addEventListener("load", handleLoad);
         return () => iframe.removeEventListener("load", handleLoad);
       }
     } else {
-      connect().catch(console.error);
+      setTimeout(() => {
+        connect().catch(console.error);
+      }, 0);
     }
-  }, [autoConnect, connect, iframeRef, targetWindow]);
+  }, [autoConnect, connect, iframeRef, targetWindow, asIframe]);
 
   // 组件卸载时断开连接
   useEffect(() => {

@@ -2,7 +2,7 @@
  * MCP Client React Hook
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   Tool,
   Resource,
@@ -25,6 +25,11 @@ export interface UseMcpClientOptions extends McpClientOptions {
    * Transport 配置
    */
   transportOptions?: ClientTransportOptions;
+  /**
+   * iframe 元素的 ref（反向模式使用）
+   * 设置后，Client 在主页面中运行，与 iframe 中的 Server 通信
+   */
+  iframeRef?: React.RefObject<HTMLIFrameElement | null>;
   /**
    * 连接后是否自动获取 tools/resources/prompts 列表
    */
@@ -143,18 +148,15 @@ export function useMcpClient(
 ): UseMcpClientReturn {
   const {
     transportOptions,
+    iframeRef,
     autoConnect = true,
     autoFetch = true,
     allowedOrigins,
     ...clientOptions
   } = options;
 
-  // 使用 ref 保存 client 实例，避免重复创建
-  const clientRef = useRef<McpClient | null>(null);
-  if (!clientRef.current) {
-    clientRef.current = new McpClient(clientOptions);
-  }
-  const client = clientRef.current;
+  // 使用 useState 保存 client 实例，避免重复创建
+  const [client] = useState<McpClient>(() => new McpClient(clientOptions));
 
   const [state, setState] = useState<ClientState>("disconnected");
   const [error, setError] = useState<Error | null>(null);
@@ -227,9 +229,12 @@ export function useMcpClient(
       setError(null);
       setState("connecting");
 
-      const finalTransportOptions = {
+      // 如果指定了 iframeRef，使用反向模式（主页面作为 Client）
+      const target = iframeRef?.current?.contentWindow;
+      const finalTransportOptions: ClientTransportOptions = {
         ...transportOptions,
         allowedOrigins: allowedOrigins ?? transportOptions?.allowedOrigins,
+        ...(target ? { target } : {}),
       };
 
       const info = await client.connect(finalTransportOptions);
@@ -259,6 +264,7 @@ export function useMcpClient(
   }, [
     client,
     transportOptions,
+    iframeRef,
     allowedOrigins,
     autoFetch,
     refreshTools,
@@ -304,9 +310,34 @@ export function useMcpClient(
   useEffect(() => {
     if (!autoConnect) return;
 
-    // 检查是否在 iframe 中
+    // 反向模式：Client 在主页面中运行，与 iframe 中的 Server 通信
+    if (iframeRef) {
+      const iframe = iframeRef.current;
+      if (!iframe) return;
+
+      const handleLoad = () => {
+        setTimeout(() => {
+          connect().catch(console.error);
+        }, 0);
+      };
+
+      // 如果 iframe 已经加载完成
+      if (iframe.contentDocument?.readyState === "complete") {
+        setTimeout(() => {
+          connect().catch(console.error);
+        }, 0);
+      } else {
+        iframe.addEventListener("load", handleLoad);
+        return () => iframe.removeEventListener("load", handleLoad);
+      }
+      return;
+    }
+
+    // 默认模式：检查是否在 iframe 中
     if (window === window.parent) {
-      console.warn("MCP Client 需要在 iframe 中运行");
+      console.warn(
+        "MCP Client 默认模式需要在 iframe 中运行，或使用 iframeRef 指定目标"
+      );
       return;
     }
 
@@ -329,7 +360,7 @@ export function useMcpClient(
     return () => {
       mounted = false;
     };
-  }, [autoConnect, connect]);
+  }, [autoConnect, connect, iframeRef]);
 
   // 组件卸载时断开连接
   useEffect(() => {

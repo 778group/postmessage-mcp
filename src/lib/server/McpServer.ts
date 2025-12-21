@@ -114,10 +114,11 @@ export class McpServer {
   }
 
   /**
-   * 连接到 iframe
+   * 连接到目标窗口
+   * @param target - iframe 元素、Window 对象，或 'parent' 表示父窗口（反向模式）
    */
   async connect(
-    target: HTMLIFrameElement | Window,
+    target: HTMLIFrameElement | Window | "parent",
     options?: Omit<ServerTransportOptions, "target">
   ): Promise<void> {
     if (this.transport) {
