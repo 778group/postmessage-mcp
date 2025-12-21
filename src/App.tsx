@@ -1,4 +1,4 @@
-import { RefObject, useState } from "react";
+import { type RefObject, useState } from "react";
 import { useMcpServer } from "./lib";
 import "./App.css";
 

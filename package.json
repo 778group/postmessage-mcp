@@ -1,19 +1,49 @@
 {
   "name": "postmessage-mcp",
-  "private": true,
   "version": "0.0.1",
+  "description": "基于 PostMessage 的 MCP (Model Context Protocol) 通信库，支持主页面与 iframe 之间的双向通信",
   "type": "module",
+  "main": "./dist-lib/index.js",
+  "types": "./dist-lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist-lib/index.d.ts",
+      "import": "./dist-lib/index.js"
+    }
+  },
+  "files": [
+    "dist-lib",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "postmessage",
+    "iframe",
+    "communication",
+    "react"
+  ],
+  "author": "ylfeng250",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/778group/postmessage-mcp"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:lib": "tsc -p tsconfig.lib.json",
+    "prepublishOnly": "npm run build:lib",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
-    "post-robot": "^8.0.32",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "post-robot": "^8.0.32"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

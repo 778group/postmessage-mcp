@@ -1,0 +1,43 @@
+# 源代码（保留 dist-lib）
+src/
+*.ts
+*.tsx
+!dist-lib/**/*.ts
+!dist-lib/**/*.d.ts
+
+# 配置文件
+tsconfig*.json
+vite.config.ts
+eslint.config.js
+
+# 开发文件
+*.html
+client.html
+index.html
+*.css
+!dist-lib/**/*.css
+
+# 构建产物（应用，不包含库）
+dist/
+node_modules/
+
+# 开发工具
+.vscode/
+.idea/
+*.log
+
+# 测试文件
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Git
+.git/
+.gitignore
+
+# 锁文件
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+

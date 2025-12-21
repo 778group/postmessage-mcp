@@ -9,11 +9,135 @@
 - 🎯 完整支持 MCP 协议（Tools、Resources、Prompts）
 - ⚛️ React Hooks 封装，易于集成
 - 📦 TypeScript 支持，类型安全
+- 🔄 支持双向模式：主页面/iframe 都可以作为 Server 或 Client
 
 ## 安装
 
+### 作为 npm 包使用
+
+```bash
+npm install postmessage-mcp
+# 或
+pnpm add postmessage-mcp
+# 或
+yarn add postmessage-mcp
+```
+
+### 开发环境安装
+
 ```bash
 pnpm install
+```
+
+## 快速开始
+
+### 基本用法（主页面作为 Server，iframe 作为 Client）
+
+**主页面（Server）**：
+
+```typescript
+import { useMcpServer } from 'postmessage-mcp';
+import { useRef } from 'react';
+
+function App() {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  
+  const { addTool, isConnected } = useMcpServer({
+    name: 'my-server',
+    version: '1.0.0',
+    iframeRef,
+    autoConnect: true,
+  });
+
+  // 注册工具
+  addTool({
+    name: 'greet',
+    description: '问候工具',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+      },
+    },
+    handler: async (input) => {
+      return {
+        content: [{ type: 'text', text: `Hello, ${input.name}!` }],
+      };
+    },
+  });
+
+  return (
+    <div>
+      <div>状态: {isConnected ? '已连接' : '未连接'}</div>
+      <iframe ref={iframeRef} src="/client.html" />
+    </div>
+  );
+}
+```
+
+**iframe 页面（Client）**：
+
+```typescript
+import { useMcpClient } from 'postmessage-mcp';
+
+function ClientApp() {
+  const { tools, callTool, isConnected } = useMcpClient({
+    name: 'my-client',
+    version: '1.0.0',
+    autoConnect: true,
+  });
+
+  const handleGreet = async () => {
+    const result = await callTool('greet', { name: 'World' });
+    console.log(result);
+  };
+
+  return (
+    <div>
+      <div>状态: {isConnected ? '已连接' : '未连接'}</div>
+      <button onClick={handleGreet}>调用工具</button>
+    </div>
+  );
+}
+```
+
+### 反向模式（iframe 作为 Server，主页面作为 Client）
+
+**iframe 页面（Server）**：
+
+```typescript
+import { useMcpServer } from 'postmessage-mcp';
+
+function IframeServer() {
+  const { addTool } = useMcpServer({
+    name: 'iframe-server',
+    version: '1.0.0',
+    asIframe: true, // 关键：设置为 true 表示 Server 在 iframe 中运行
+    autoConnect: true,
+  });
+
+  // 注册工具...
+}
+```
+
+**主页面（Client）**：
+
+```typescript
+import { useMcpClient } from 'postmessage-mcp';
+import { useRef } from 'react';
+
+function ParentClient() {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  
+  const { callTool } = useMcpClient({
+    name: 'parent-client',
+    version: '1.0.0',
+    iframeRef, // 指定 iframe，Client 将与其中的 Server 通信
+    autoConnect: true,
+  });
+
+  // 使用工具...
+}
 ```
 
 ## 域名白名单功能
@@ -23,7 +147,7 @@ pnpm install
 ### Server 端配置
 
 ```typescript
-import { useMcpServer } from './lib/hooks/useMcpServer';
+import { useMcpServer } from 'postmessage-mcp';
 
 const { server, connect } = useMcpServer({
   iframeRef: iframeRef,
@@ -41,7 +165,7 @@ const { server, connect } = useMcpServer({
 ### Client 端配置
 
 ```typescript
-import { useMcpClient } from './lib/hooks/useMcpClient';
+import { useMcpClient } from 'postmessage-mcp';
 
 const { client, connect } = useMcpClient({
   // 配置允许的域名白名单
@@ -73,11 +197,24 @@ const { client, connect } = useMcpClient({
 # 开发服务器
 pnpm dev
 
-# 构建
+# 构建应用
 pnpm build
+
+# 构建库（用于发布）
+pnpm build:lib
 
 # 预览构建结果
 pnpm preview
+```
+
+## 发布到 npm
+
+```bash
+# 构建库
+pnpm build:lib
+
+# 发布（需要先登录 npm）
+npm publish
 ```
 
 ## React + TypeScript + Vite
