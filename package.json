@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/778group/postmessage-mcp"
+    "url": "git+https://github.com/778group/postmessage-mcp.git"
   },
   "scripts": {
     "dev": "vite",
