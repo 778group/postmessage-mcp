@@ -217,76 +217,44 @@ pnpm build:lib
 npm publish
 ```
 
-## React + TypeScript + Vite
+## API 概览
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+### 核心类
 
-Currently, two official plugins are available:
+- **McpServer** — MCP Server 实现，注册 tools/resources/prompts 并响应 Client 请求
+- **McpClient** — MCP Client 实现，发现并调用 Server 暴露的能力
+- **PostMessageServerTransport** — 基于 postMessage 的 Server 端传输层
+- **PostMessageClientTransport** — 基于 postMessage 的 Client 端传输层
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### React Hooks
 
-## React Compiler
+- **useMcpServer** — React Hook，封装 McpServer 的创建、连接与能力注册
+- **useMcpClient** — React Hook，封装 McpClient 的创建、连接与能力发现
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 支持的 MCP 方法
 
-## Expanding the ESLint configuration
+| 方法 | 说明 |
+|---|---|
+| `initialize` | 能力握手 |
+| `notifications/initialized` | 确认初始化完成 |
+| `tools/list` | 发现可用工具 |
+| `tools/call` | 调用工具 |
+| `resources/list` | 发现可用资源 |
+| `resources/read` | 读取资源 |
+| `prompts/list` | 发现可用提示词 |
+| `prompts/get` | 获取提示词 |
+| `ping` | 心跳检测 |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 架构
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+React Hooks（useMcpServer / useMcpClient）
+        │
+协议层（McpServer / McpClient — JSON-RPC 2.0 + MCP 方法）
+        │
+传输层（PostMessageServerTransport / PostMessageClientTransport — 原生 postMessage）
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## License
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+MIT

@@ -1,6 +1,6 @@
 {
   "name": "postmessage-mcp",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "基于 PostMessage 的 MCP (Model Context Protocol) 通信库，支持主页面与 iframe 之间的双向通信",
   "type": "module",
   "main": "./dist-lib/index.js",
