@@ -99,6 +99,9 @@ export default function AppleNav() {
             <NavLink to="/color-palette" end style={navLinkStyle}>
               Color Palette
             </NavLink>
+            <NavLink to="/agent-bridge" end style={navLinkStyle}>
+              Agent Bridge
+            </NavLink>
           </div>
         </div>
       </nav>

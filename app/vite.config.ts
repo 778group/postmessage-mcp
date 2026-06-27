@@ -11,6 +11,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         'calculator-client': resolve(__dirname, 'calculator-client.html'),
         'palette-server': resolve(__dirname, 'palette-server.html'),
+        'crm-server': resolve(__dirname, 'crm-server.html'),
       },
     },
   },
