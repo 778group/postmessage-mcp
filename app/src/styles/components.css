@@ -1,0 +1,287 @@
+/* ---- Buttons ---- */
+
+.apple-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-text);
+  transition: transform 0.15s ease, opacity 0.2s ease;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.apple-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.apple-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.apple-button-primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font: var(--text-body);
+  border-radius: var(--radius-pill);
+  padding: 11px 22px;
+}
+
+.apple-button-primary:focus-visible {
+  outline: 2px solid var(--color-primary-focus);
+  outline-offset: 2px;
+}
+
+.apple-button-secondary-pill {
+  background: transparent;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-pill);
+  padding: 11px 22px;
+  font: var(--text-body);
+}
+
+.apple-button-dark-utility {
+  background: var(--color-ink);
+  color: var(--color-on-dark);
+  font: var(--text-button-utility);
+  border-radius: var(--radius-sm);
+  padding: 8px 15px;
+}
+
+/* ---- Cards ---- */
+
+.apple-card {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+.apple-card-dark {
+  background: var(--color-surface-tile-1);
+  color: var(--color-on-dark);
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+/* ---- Tile Surface Cards ---- */
+
+.product-tile-light {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  border-radius: var(--radius-none);
+  padding: var(--space-section) var(--space-xxl);
+}
+
+.product-tile-parchment {
+  background: var(--color-canvas-parchment);
+  color: var(--color-ink);
+  border-radius: var(--radius-none);
+  padding: var(--space-section) var(--space-xxl);
+}
+
+.product-tile-dark {
+  background: var(--color-surface-tile-1);
+  color: var(--color-on-dark);
+  border-radius: var(--radius-none);
+  padding: var(--space-section) var(--space-xxl);
+}
+
+/* ---- Status Indicator ---- */
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.status-dot.connected {
+  background: #30d158;
+}
+
+.status-dot.disconnected {
+  background: #ff453a;
+}
+
+.status-dot.connecting {
+  background: #ff9f0a;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ---- Code Block ---- */
+
+.code-block {
+  background: var(--color-surface-tile-1);
+  color: var(--color-body-on-dark);
+  font-family: 'SF Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: var(--space-lg);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* ---- Inputs & Selects ---- */
+
+.apple-input {
+  font: var(--text-body);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.apple-input:focus {
+  border-color: var(--color-primary);
+}
+
+.apple-select {
+  font: var(--text-body);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  outline: none;
+  width: 100%;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L2 4h8z' fill='%237a7a7a'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+.apple-select:focus {
+  border-color: var(--color-primary);
+}
+
+/* ---- Color Input ---- */
+
+.apple-color-input {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--color-hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  padding: 2px;
+  background: var(--color-canvas);
+  transition: border-color 0.2s;
+}
+
+.apple-color-input:focus {
+  border-color: var(--color-primary);
+}
+
+.apple-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.apple-color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+/* ---- Section Label ---- */
+
+.section-label {
+  font: var(--text-caption-strong);
+  color: var(--color-ink-muted-48);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-sm);
+}
+
+/* ---- Connection Status Bar ---- */
+
+.connection-bar {
+  display: flex;
+  align-items: center;
+  font: var(--text-caption);
+  color: var(--color-ink-muted-80);
+  padding: var(--space-xs) 0;
+}
+
+/* ---- Empty State ---- */
+
+.empty-state {
+  font: var(--text-body);
+  color: var(--color-ink-muted-48);
+  text-align: center;
+  padding: var(--space-xxl) var(--space-lg);
+}
+
+/* ---- Log List ---- */
+
+.log-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font: var(--text-caption);
+  font-family: 'SF Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 13px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.log-item {
+  padding: var(--space-xxs) 0;
+  border-bottom: 1px solid var(--color-divider-soft);
+  color: var(--color-ink-muted-80);
+}
+
+.log-item:last-child {
+  border-bottom: none;
+}
+
+/* ---- Inline Row ---- */
+
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.inline-row-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* ---- Section Spacing ---- */
+
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.section-stack-sm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
