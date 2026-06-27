@@ -121,9 +121,18 @@ export class PostMessageClientTransport implements Transport {
 
   /**
    * 等待握手完成（对方确认 ready）
+   * @param timeoutMs 超时时间（毫秒），默认 10000ms
    */
-  waitForReady(): Promise<void> {
-    return this._readyPromise;
+  waitForReady(timeoutMs = 10000): Promise<void> {
+    return Promise.race([
+      this._readyPromise,
+      new Promise<void>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`握手超时（${timeoutMs}ms）`)),
+          timeoutMs
+        )
+      ),
+    ]);
   }
 
   /**

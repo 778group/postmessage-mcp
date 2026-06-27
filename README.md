@@ -34,6 +34,8 @@ pnpm install
 
 ## 快速开始
 
+> **⚠️ 注意**：以下示例为简化演示，未配置 `allowedOrigins` 和 `targetOrigin`，默认允许所有来源。生产环境中请务必参考[域名白名单功能](#域名白名单功能)进行配置。
+
 ### 基本用法（主页面作为 Server，iframe 作为 Client）
 
 **主页面（Server）**：
@@ -158,6 +160,8 @@ function ParentClient() {
 
 ## 域名白名单功能
 
+> **⚠️ 安全警告**：默认情况下，如果不配置 `allowedOrigins` 和 `targetOrigin`，通信链路对**任意 origin 完全开放**，任何页面都可以通过 postMessage 与你的 MCP Server/Client 通信。**在生产环境中务必配置白名单**，否则可能导致工具调用、资源读取等 MCP 能力被恶意页面利用。
+
 为了增强安全性，本项目支持对 iframe 和窗口通信进行域名白名单控制。
 
 ### Server 端配置
@@ -202,10 +206,12 @@ const { client, connect } = useMcpClient({
 
 ### 安全建议
 
-1. 在生产环境中始终配置 `allowedOrigins`
-2. 避免使用 `targetOrigin: '*'` 配合空白名单
-3. 尽量使用精确匹配而非通配符
-4. 定期审查和更新白名单配置
+1. **在生产环境中必须配置 `allowedOrigins`**，不配置意味着任意页面均可通信
+2. 同时设置 `targetOrigin` 为非 `'*'` 的具体 origin，避免消息被任意页面接收
+3. Server 和 Client **两端都应当配置** `allowedOrigins`，形成双向校验
+4. 尽量使用精确匹配而非通配符
+5. 定期审查和更新白名单配置
+6. 避免在 `file://` 协议或 sandbox iframe 下使用默认配置（origin 为 `"null"` 时会退化为 `"*"`）
 
 ## 开发
 

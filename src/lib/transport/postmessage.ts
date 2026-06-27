@@ -20,6 +20,21 @@ export interface PostMessageListener {
 }
 
 /**
+ * 从 origin 中提取 hostname（去除协议和端口）
+ */
+function extractHostname(origin: string): string {
+  return origin.replace(/^[^:]+:\/\//, "").replace(/:\d+$/, "");
+}
+
+/**
+ * 检查 hostname 是否匹配通配符域名
+ * domain 不含前导通配符，如 "example.com"
+ */
+function matchWildcardHostname(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith("." + domain);
+}
+
+/**
  * 检查 origin 是否在白名单中
  */
 export function isOriginAllowed(
@@ -38,7 +53,7 @@ export function isOriginAllowed(
     // 通配符匹配 (*.example.com)
     if (allowed.startsWith("*.")) {
       const domain = allowed.slice(2);
-      if (origin.endsWith(domain) || origin.endsWith("." + domain)) {
+      if (matchWildcardHostname(extractHostname(origin), domain)) {
         return true;
       }
     }
@@ -50,7 +65,7 @@ export function isOriginAllowed(
         const domain = rest.slice(2);
         if (
           origin.startsWith(protocol + "://") &&
-          (origin.endsWith(domain) || origin.endsWith("." + domain))
+          matchWildcardHostname(extractHostname(origin), domain)
         ) {
           return true;
         }
@@ -83,6 +98,18 @@ export function createPostMessageListener(
     // 校验消息格式
     const payload = event.data as PostMessageData | undefined;
     if (!payload || payload.type !== MCP_MESSAGE_EVENT) {
+      return;
+    }
+
+    // 拒绝超大消息，防止 DoS
+    const MAX_MESSAGE_SIZE = 1024 * 1024; // 1 MiB
+    try {
+      const json = JSON.stringify(event.data);
+      if (json.length > MAX_MESSAGE_SIZE) {
+        console.warn(`拒绝超大 postMessage (${json.length} bytes)`);
+        return;
+      }
+    } catch {
       return;
     }
 

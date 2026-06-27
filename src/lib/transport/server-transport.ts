@@ -29,7 +29,9 @@ export class PostMessageServerTransport implements Transport {
   // Ready handshake
   private _readyPromise: Promise<void>;
   private _readyResolve!: () => void;
-  private _gotReady = false;
+
+  // 握手完成后记录 Client 窗口，后续消息仅接受该窗口来源
+  private clientWindow: Window | null = null;
 
   onmessage?: (message: JSONRPCMessage) => void;
   onerror?: (error: Error) => void;
@@ -58,6 +60,7 @@ export class PostMessageServerTransport implements Transport {
     }
 
     // targetWindow 为 null 时不过滤 source，由 allowedOrigins 控制安全
+    // 握手完成后通过 clientWindow 限定消息来源
     this.listener = createPostMessageListener(
       null,
       this.allowedOrigins,
@@ -66,11 +69,15 @@ export class PostMessageServerTransport implements Transport {
           this.handleReadyMessage(data, event);
           return;
         }
+        // 握手完成后，校验消息来源是否与握手时的窗口一致
+        if (this.clientWindow && event.source !== this.clientWindow) {
+          return;
+        }
         // 非握手消息，转发给 MCP 协议层
         if (this.started && this.onmessage) {
           this.onmessage(data as JSONRPCMessage);
         }
-      }
+      },
     );
   }
 
@@ -79,21 +86,27 @@ export class PostMessageServerTransport implements Transport {
    */
   private handleReadyMessage(
     data: { method: string },
-    event: MessageEvent
+    event: MessageEvent,
   ): void {
     if (data.method === MCP_READY_EVENT) {
-      // 收到 ready，回复 ack
+      // 记录 Client 窗口来源，后续仅接受该窗口的消息
       if (event.source) {
+        this.clientWindow = event.source as Window;
+        let ackOrigin = event.origin;
+        if (event.origin === "null") {
+          console.warn(
+            "收到来自 null origin 的握手请求（可能来自 file:// 协议或 sandbox iframe），ack 将使用 '*' 作为 targetOrigin",
+          );
+          ackOrigin = "*";
+        }
         sendPostMessage(
           event.source as Window,
           createReadyMessage(MCP_READY_ACK_EVENT),
-          event.origin !== "null" ? event.origin : "*"
+          ackOrigin,
         );
       }
-      this._gotReady = true;
       this._readyResolve();
     } else if (data.method === MCP_READY_ACK_EVENT) {
-      this._gotReady = true;
       this._readyResolve();
     }
   }
@@ -136,15 +149,13 @@ export class PostMessageServerTransport implements Transport {
         sendPostMessage(
           this.targetWindow,
           createReadyMessage(MCP_READY_EVENT),
-          this.targetOrigin
+          this.targetOrigin,
         );
       }
     } catch (error) {
       this.started = false;
       if (this.onerror) {
-        this.onerror(
-          error instanceof Error ? error : new Error(String(error))
-        );
+        this.onerror(error instanceof Error ? error : new Error(String(error)));
       }
       throw error;
     }
@@ -152,9 +163,18 @@ export class PostMessageServerTransport implements Transport {
 
   /**
    * 等待握手完成（对方确认 ready）
+   * @param timeoutMs 超时时间（毫秒），默认 10000ms
    */
-  waitForReady(): Promise<void> {
-    return this._readyPromise;
+  waitForReady(timeoutMs = 10000): Promise<void> {
+    return Promise.race([
+      this._readyPromise,
+      new Promise<void>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`握手超时（${timeoutMs}ms）`)),
+          timeoutMs,
+        ),
+      ),
+    ]);
   }
 
   /**
@@ -169,9 +189,7 @@ export class PostMessageServerTransport implements Transport {
       sendPostMessage(this.targetWindow, message, this.targetOrigin);
     } catch (error) {
       if (this.onerror) {
-        this.onerror(
-          error instanceof Error ? error : new Error(String(error))
-        );
+        this.onerror(error instanceof Error ? error : new Error(String(error)));
       }
       throw error;
     }
@@ -187,13 +205,12 @@ export class PostMessageServerTransport implements Transport {
     }
     this.targetWindow = null;
     this.started = false;
+    this.clientWindow = null;
 
     // 重置 ready promise
     this._readyPromise = new Promise((resolve) => {
       this._readyResolve = resolve;
     });
-    this._gotReady = false;
-
     if (this.onclose) {
       this.onclose();
     }
@@ -204,7 +221,7 @@ export class PostMessageServerTransport implements Transport {
  * 创建 Server Transport
  */
 export function createServerTransport(
-  options: ServerTransportOptions
+  options: ServerTransportOptions,
 ): PostMessageServerTransport {
   return new PostMessageServerTransport(options);
 }

@@ -34,6 +34,8 @@ pnpm install
 
 ## Quick Start
 
+> **⚠️ Note**: The following examples are simplified demos without `allowedOrigins` or `targetOrigin` configured — they default to allowing all origins. For production, please refer to [Origin Allowlist](#origin-allowlist) to configure properly.
+
 ### Basic Usage (Main Page as Server, iframe as Client)
 
 **Main Page (Server)**:
@@ -158,6 +160,8 @@ The handshake is handled internally by the transport layer and is transparent to
 
 ## Origin Allowlist
 
+> **⚠️ Security Warning**: By default, if `allowedOrigins` and `targetOrigin` are not configured, the communication channel is **completely open to any origin** — any page can communicate with your MCP Server/Client via postMessage. **You MUST configure the allowlist in production**, otherwise MCP capabilities such as tool calls and resource reads could be exploited by malicious pages.
+
 For enhanced security, this project supports domain allowlist control for iframe and window communication.
 
 ### Server Configuration
@@ -202,10 +206,12 @@ const { client, connect } = useMcpClient({
 
 ### Security Recommendations
 
-1. Always configure `allowedOrigins` in production
-2. Avoid using `targetOrigin: '*'` with an empty allowlist
-3. Prefer exact matches over wildcards when possible
-4. Regularly review and update allowlist configurations
+1. **You MUST configure `allowedOrigins` in production** — no configuration means any page can communicate
+2. Set `targetOrigin` to a specific origin (not `'*'`) to prevent messages from being received by arbitrary pages
+3. Configure `allowedOrigins` on **both the Server and Client sides** for bidirectional validation
+4. Prefer exact matches over wildcards when possible
+5. Regularly review and update allowlist configurations
+6. Avoid using default settings with `file://` protocol or sandbox iframes (origin will be `"null"`, which degrades to `"*"`)
 
 ## Development
 
