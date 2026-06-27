@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 
 dist-lib
+
+.claude/settings.local.json

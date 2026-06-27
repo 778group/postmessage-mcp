@@ -3,6 +3,7 @@
  */
 
 export * from './types.js';
+export * from './postmessage.js';
 export * from './server-transport.js';
 export * from './client-transport.js';
 

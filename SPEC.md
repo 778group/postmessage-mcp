@@ -8,7 +8,7 @@
 
 - **完整 MCP 生命周期**：initialize、tools/list、tools/call、resources/list、resources/read、prompts/list、prompts/get、ping
 - **两种运行模式**：普通模式（主页面为 Server，iframe 为 Client）与反向模式（iframe 为 Server，主页面为 Client）
-- **跨域安全**：基于 `post-robot` 进行消息路由，支持 origin 白名单与通配符匹配
+- **跨域安全**：基于原生 `window.postMessage` 实现，支持 origin 白名单与通配符匹配
 - **React Hooks**：提供 `useMcpServer` / `useMcpClient` 一等公民 hooks，支持自动连接、自动发现与状态管理
 - **框架无关核心**：`McpServer` 与 `McpClient` 类可脱离 React 独立使用
 - **超时处理**：请求 30 秒超时，自动清理
@@ -31,17 +31,18 @@
 │               传输层（第一层）                          │
 │  PostMessageServerTransport                          │
 │  PostMessageClientTransport                          │
-│      （post-robot 封装、origin 校验）                   │
+│      （原生 postMessage 封装、origin 校验）               │
 └─────────────────────────────────────────────────────┘
 ```
 
 ### 第一层：传输层
 
-封装 `post-robot` 库，实现 `@modelcontextprotocol/sdk` 的 `Transport` 接口。
+基于原生 `window.postMessage` API 封装，实现 `@modelcontextprotocol/sdk` 的 `Transport` 接口。
 
-- **PostMessageServerTransport** — 监听来自目标窗口（iframe 或父窗口）的消息。在 `start()` 时注册 `postRobot.on('mcp-message', handler)` 监听器。
+- **PostMessageServerTransport** — 监听来自目标窗口（iframe 或父窗口）的消息。在 `start()` 时通过 `addEventListener('message')` 注册监听器。
 - **PostMessageClientTransport** — 向目标窗口发送消息。默认目标为 `window.parent`（普通 iframe 模式）。支持显式指定目标以启用反向模式。
-- **Origin 校验** — 两种 Transport 均支持 `allowedOrigins` 配置，包含精确匹配、`*.domain` 通配符和 `https://*.domain` 通配符三种模式。当 `allowedOrigins` 为空或未定义时，允许所有来源。
+- **Origin 校验** — 通过 `isOriginAllowed()` 工具函数进行白名单校验，支持精确匹配、`*.domain` 通配符和 `https://*.domain` 通配符三种模式。当 `allowedOrigins` 为空或未定义时，允许所有来源。
+- **`createPostMessageListener()` / `sendPostMessage()`** — 原生 postMessage 工具函数，可在 Transport 类之外独立使用。
 
 ### 第二层：协议层
 
@@ -362,7 +363,6 @@ client.html        # iframe 页面 HTML
 | 包 | 版本 | 用途 |
 |---|---|---|
 | `@modelcontextprotocol/sdk` | ^1.25.1 | MCP 类型定义（`Transport` 接口、`Tool`、`Resource`、`Prompt`、`JSONRPCMessage`） |
-| `post-robot` | ^8.0.32 | 跨域 postMessage，具备 origin 校验与消息路由能力 |
 | `react`（peer） | 18.x / 19.x | 仅在配合 hooks 使用时需要 |
 | `react-dom`（peer） | 18.x / 19.x | 仅在配合 hooks 使用时需要 |
 
