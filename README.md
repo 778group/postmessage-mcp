@@ -6,6 +6,7 @@
 
 ## 特性
 
+- 🤝 内置握手机制，杜绝连接时序问题
 - 🔒 支持域名白名单控制，确保通信安全
 - 🚀 基于 PostMessage API，跨域通信更安全
 - 🎯 完整支持 MCP 协议（Tools、Resources、Prompts）
@@ -39,7 +40,7 @@ pnpm install
 
 ```typescript
 import { useMcpServer } from 'postmessage-mcp';
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 
 function App() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -51,22 +52,24 @@ function App() {
     autoConnect: true,
   });
 
-  // 注册工具
-  addTool({
-    name: 'greet',
-    description: '问候工具',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string' },
+  // 注册工具（在 useEffect 中注册，避免渲染期间副作用）
+  useEffect(() => {
+    addTool({
+      name: 'greet',
+      description: '问候工具',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
       },
-    },
-    handler: async (input) => {
-      return {
-        content: [{ type: 'text', text: `Hello, ${input.name}!` }],
-      };
-    },
-  });
+      handler: async (input) => {
+        return {
+          content: [{ type: 'text', text: `Hello, ${input.name}!` }],
+        };
+      },
+    });
+  }, [addTool]);
 
   return (
     <div>
@@ -141,6 +144,17 @@ function ParentClient() {
   // 使用工具...
 }
 ```
+
+## 握手机制
+
+为避免连接时序问题（iframe 中的 Client 先于父页面的 Server 发送消息导致消息丢失），传输层内置了 Ready 握手机制：
+
+1. Transport 在**构造时**即通过 `addEventListener('message')` 启动监听，不依赖 `start()` 调用时机
+2. Client 调用 `connect()` 时发送 `__mcp_ready__` 信号
+3. Server 收到 ready 后通过 `event.source` 回复 `__mcp_ready_ack__`
+4. Client 收到 ack 后才发送 MCP `initialize`，开始正式通信
+
+握手由传输层内部处理，对上层 MCP 协议透明，无需使用者额外配置。
 
 ## 域名白名单功能
 
@@ -251,11 +265,18 @@ npm publish
 
 ```
 React Hooks（useMcpServer / useMcpClient）
+        │  状态管理、自动连接、自动发现
         │
-协议层（McpServer / McpClient — JSON-RPC 2.0 + MCP 方法）
+协议层（McpServer / McpClient）
+        │  JSON-RPC 2.0、MCP 方法路由、30s 超时
         │
-传输层（PostMessageServerTransport / PostMessageClientTransport — 原生 postMessage）
+传输层（PostMessageServerTransport / PostMessageClientTransport）
+        │  构造时启动监听、Ready 握手、origin 白名单校验
+        │
+浏览器 API（window.postMessage）
 ```
+
+详细架构图与通信流程见 [SPEC.md](./SPEC.md)。
 
 ## License
 

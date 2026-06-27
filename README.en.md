@@ -1,9 +1,12 @@
 # PostMessage MCP
 
+[中文](./README.md)
+
 A Model Context Protocol (MCP) implementation based on PostMessage, supporting bidirectional communication between iframes and windows.
 
 ## Features
 
+- Built-in handshake mechanism to eliminate connection timing issues
 - Domain allowlist control for secure communication
 - Based on the PostMessage API for safer cross-origin messaging
 - Full MCP protocol support (Tools, Resources, Prompts)
@@ -37,7 +40,7 @@ pnpm install
 
 ```typescript
 import { useMcpServer } from 'postmessage-mcp';
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 
 function App() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -49,22 +52,24 @@ function App() {
     autoConnect: true,
   });
 
-  // Register a tool
-  addTool({
-    name: 'greet',
-    description: 'A greeting tool',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string' },
+  // Register tools inside useEffect to avoid side effects during render
+  useEffect(() => {
+    addTool({
+      name: 'greet',
+      description: 'A greeting tool',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
       },
-    },
-    handler: async (input) => {
-      return {
-        content: [{ type: 'text', text: `Hello, ${input.name}!` }],
-      };
-    },
-  });
+      handler: async (input) => {
+        return {
+          content: [{ type: 'text', text: `Hello, ${input.name}!` }],
+        };
+      },
+    });
+  }, [addTool]);
 
   return (
     <div>
@@ -139,6 +144,17 @@ function ParentClient() {
   // Use tools...
 }
 ```
+
+## Handshake Mechanism
+
+To avoid connection timing issues (the Client in an iframe sending messages before the parent page's Server is ready), the transport layer includes a built-in Ready handshake:
+
+1. Transport starts listening via `addEventListener('message')` **in the constructor**, before `start()` is called
+2. Client sends `__mcp_ready__` signal when `connect()` is called
+3. Server receives ready and replies with `__mcp_ready_ack__` via `event.source`
+4. Only after receiving the ack does the Client send the MCP `initialize`, beginning formal communication
+
+The handshake is handled internally by the transport layer and is transparent to the MCP protocol — no additional configuration is needed.
 
 ## Origin Allowlist
 
@@ -249,11 +265,18 @@ npm publish
 
 ```
 React Hooks (useMcpServer / useMcpClient)
+        │  State management, auto-connect, auto-discovery
         │
-Protocol Layer (McpServer / McpClient — JSON-RPC 2.0 + MCP methods)
+Protocol Layer (McpServer / McpClient)
+        │  JSON-RPC 2.0, MCP method routing, 30s timeout
         │
-Transport Layer (PostMessageServerTransport / PostMessageClientTransport — native postMessage)
+Transport Layer (PostMessageServerTransport / PostMessageClientTransport)
+        │  Listener on construction, Ready handshake, origin allowlist
+        │
+Browser API (window.postMessage)
 ```
+
+See [SPEC.en.md](./SPEC.en.md) for detailed architecture diagrams and communication flows.
 
 ## License
 
