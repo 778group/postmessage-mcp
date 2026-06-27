@@ -18,29 +18,42 @@
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│              React Hooks (Layer 3)                   │
-│         useMcpServer  /  useMcpClient                │
-│   (state management, auto-connect, auto-discovery)   │
-├─────────────────────────────────────────────────────┤
-│            Protocol Layer (Layer 2)                  │
-│         McpServer  /  McpClient                      │
-│   (JSON-RPC 2.0, MCP methods, request/response)      │
-├─────────────────────────────────────────────────────┤
-│            Transport Layer (Layer 1)                 │
-│  PostMessageServerTransport                          │
-│  PostMessageClientTransport                          │
-│   (native postMessage encapsulation, origin check)   │
-└─────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph hooks["React Hooks (Layer 3)"]
+        UseServer[useMcpServer<br>state / auto-connect]
+        UseClient[useMcpClient<br>state / auto-discovery]
+    end
+
+    subgraph protocol["Protocol Layer (Layer 2)"]
+        McpSrv[McpServer<br>JSON-RPC 2.0 routing<br>Tool/Resource/Prompt management]
+        McpCli[McpClient<br>JSON-RPC 2.0 requests<br>30s timeout control]
+    end
+
+    subgraph transport["Transport Layer (Layer 1)"]
+        SrvTrans[PostMessageServerTransport<br>listens on construction<br>origin allowlist<br>handshake protocol]
+        CliTrans[PostMessageClientTransport<br>listens on construction<br>origin allowlist<br>handshake protocol]
+    end
+
+    subgraph browser["Browser API"]
+        PostMessage[window.postMessage]
+    end
+
+    UseServer --> McpSrv
+    UseClient --> McpCli
+    McpSrv --> SrvTrans
+    McpCli --> CliTrans
+    SrvTrans --> PostMessage
+    CliTrans --> PostMessage
 ```
 
 ### Layer 1: Transport
 
 Encapsulation of the native `window.postMessage` API, implementing the `Transport` interface from `@modelcontextprotocol/sdk`.
 
-- **PostMessageServerTransport** — Listens for messages from the target window (iframe or parent). Registers listeners via `addEventListener('message')` on `start()`.
-- **PostMessageClientTransport** — Sends messages to the target window. Default target is `window.parent` (normal iframe mode). Supports explicit target specification for reverse mode.
+- **PostMessageServerTransport** — Registers the `addEventListener('message')` listener **on construction**, so messages are captured regardless of `start()` call timing.
+- **PostMessageClientTransport** — Same: listener starts on construction. Default target is `window.parent` (normal iframe mode). Supports explicit target specification for reverse mode.
+- **Handshake Mechanism** — The transport layer internally handles `__mcp_ready__` / `__mcp_ready_ack__` handshake messages. The receiver replies with ack via `event.source`, no prior target window reference needed.
 - **Origin Validation** — Allowlist checking via the `isOriginAllowed()` utility function, supporting three modes: exact match, `*.domain` wildcard, and `https://*.domain` wildcard. When `allowedOrigins` is empty or undefined, all origins are allowed.
 - **`createPostMessageListener()` / `sendPostMessage()`** — Native postMessage utility functions usable independently of Transport classes.
 
@@ -49,7 +62,7 @@ Encapsulation of the native `window.postMessage` API, implementing the `Transpor
 Implements MCP protocol on top of JSON-RPC 2.0.
 
 - **McpServer** — Registers tools, resources, and prompts with their handlers. Listens for incoming JSON-RPC requests and dispatches them to the appropriate handlers. Returns JSON-RPC error responses (`-32601`) for unknown methods, and `-32000` for handler exceptions. The `initialize` response only declares a capability when at least one of that type is registered.
-- **McpClient** — Sends JSON-RPC requests with incrementing IDs, matching responses to pending promises via `Map<id, {resolve, reject}>`. Each request has a mandatory 30-second timeout. Sends MCP `initialize` handshake on connection.
+- **McpClient** — Sends JSON-RPC requests with incrementing IDs, matching responses to pending promises via `Map<id, {resolve, reject}>`. Each request has a mandatory 30-second timeout. `connect()` waits for the ready handshake before sending MCP `initialize`.
 
 ### Layer 3: React Hooks
 
@@ -58,42 +71,130 @@ Implements MCP protocol on top of JSON-RPC 2.0.
 
 ---
 
+## Handshake Mechanism
+
+The Transport sets up its `message` listener in the constructor, ensuring no messages are lost due to `start()` call timing. The connection flow has two phases:
+
+### Phase 1: Ready Handshake
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant Server as MCP Server
+
+    Note over Client,Server: Transport listener active from construction
+
+    Client->>Server: __mcp_ready__
+    Note over Server: Receives ready<br>Replies via event.source
+    Server->>Client: __mcp_ready_ack__
+    Note over Client: waitForReady() resolves
+
+    Note over Client,Server: Both sides confirmed ready
+```
+
+- **Client** sends `__mcp_ready__` and waits for ack via `waitForReady()`
+- **Server** receives `__mcp_ready__` and replies with `__mcp_ready_ack__` via `event.source.postMessage()`, no prior Client window reference required
+- If the Server sends ready first, the Client replies with ack; either side receiving the other's ready or ack completes the handshake
+
+### Phase 2: MCP Communication
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant Server as MCP Server
+
+    rect rgb(232, 240, 255)
+        Note over Client,Server: Ready Handshake
+        Client->>Server: __mcp_ready__
+        Server->>Client: __mcp_ready_ack__
+    end
+
+    rect rgb(255, 245, 232)
+        Note over Client,Server: MCP Initialization
+        Client->>Server: initialize
+        Server->>Client: { capabilities, serverInfo }
+        Client->>Server: notifications/initialized
+    end
+
+    rect rgb(232, 255, 232)
+        Note over Client,Server: Capability Discovery
+        Client->>Server: tools/list
+        Server->>Client: [{ name, description, inputSchema }]
+        Client->>Server: resources/list
+        Server->>Client: [{ uri, name, mimeType }]
+        Client->>Server: prompts/list
+        Server->>Client: [{ name, description }]
+    end
+
+    rect rgb(255, 255, 232)
+        Note over Client,Server: Invocation
+        Client->>Server: tools/call { name, arguments }
+        Server->>Client: { content: [...] }
+        Client->>Server: resources/read { uri }
+        Server->>Client: { contents: [...] }
+        Client->>Server: prompts/get { name, arguments }
+        Server->>Client: { messages: [...] }
+    end
+```
+
+---
+
 ## Communication Flow
 
 ### Normal Mode (Main Page as Server, iframe as Client)
 
-```
-┌──────────────────┐      postMessage           ┌──────────────────┐
-│    Main Page     │ ◄───────────────────────► │     iframe       │
-│    (Server)      │                            │    (Client)      │
-│                  │  McpServer ◄── MCP ──►    │   McpClient      │
-│  useMcpServer()  │  register tools,           │  useMcpClient()  │
-│  target iframe   │  resources, prompts        │  target parent   │
-└──────────────────┘                            └──────────────────┘
-```
+```mermaid
+sequenceDiagram
+    participant Main as Main Page (Server)
+    participant Iframe as iframe (Client)
 
-1. Main page renders `<iframe src="/client.html">` and creates `McpServer` targeting it.
-2. iframe loads and creates `McpClient` targeting `window.parent`.
-3. Client sends `initialize` → Server responds with capability declaration.
-4. Client sends `notifications/initialized`.
-5. Client calls `tools/list`, `resources/list`, `prompts/list` to discover capabilities.
-6. Client calls `tools/call`, `resources/read`, `prompts/get` to invoke capabilities.
+    Main->>Main: Render iframe
+    Main->>Main: useMcpServer() → McpServer created<br>→ Transport listening on construction
+
+    Iframe->>Iframe: Page load → React mount
+    Iframe->>Iframe: useMcpClient() → McpClient created<br>→ Transport listening on construction
+
+    Iframe->>Main: __mcp_ready__
+    Main->>Iframe: __mcp_ready_ack__
+
+    Iframe->>Main: initialize
+    Main->>Iframe: { capabilities, serverInfo }
+    Iframe->>Main: notifications/initialized
+
+    Iframe->>Main: tools/list, resources/list, prompts/list
+    Main->>Iframe: Returns registered capabilities
+
+    Iframe->>Main: tools/call, resources/read, prompts/get
+    Main->>Iframe: Returns invocation results
+```
 
 ### Reverse Mode (iframe as Server, Main Page as Client)
 
-```
-┌──────────────────┐      postMessage           ┌──────────────────┐
-│    Main Page     │ ◄───────────────────────► │     iframe       │
-│    (Client)      │                            │    (Server)      │
-│                  │  McpClient ◄── MCP ──►    │   McpServer      │
-│  useMcpClient()  │  target iframe             │  useMcpServer()  │
-│  iframeRef       │                            │  asIframe: true  │
-└──────────────────┘                            └──────────────────┘
-```
+```mermaid
+sequenceDiagram
+    participant Main as Main Page (Client)
+    participant Iframe as iframe (Server)
 
-1. iframe creates `McpServer` with `asIframe: true`, target is `'parent'`.
-2. Main page creates `McpClient` with `iframeRef` pointing to the iframe element.
-3. Same MCP handshake flow as normal mode, only roles are swapped.
+    Main->>Main: Render iframe
+    Iframe->>Iframe: Page load → React mount
+    Iframe->>Iframe: useMcpServer({ asIframe: true })<br>→ Transport listening on construction
+
+    Main->>Main: useMcpClient({ iframeRef })<br>→ Waits for iframe load
+    Main->>Main: iframe load → connect()
+
+    Main->>Iframe: __mcp_ready__
+    Iframe->>Main: __mcp_ready_ack__
+
+    Main->>Iframe: initialize
+    Iframe->>Main: { capabilities, serverInfo }
+    Main->>Iframe: notifications/initialized
+
+    Main->>Iframe: tools/list, resources/list, prompts/list
+    Iframe->>Main: Returns registered capabilities
+
+    Main->>Iframe: tools/call, resources/read, prompts/get
+    Iframe->>Main: Returns invocation results
+```
 
 ---
 

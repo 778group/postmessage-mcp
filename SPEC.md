@@ -18,29 +18,42 @@
 
 ## 架构
 
-```
-┌─────────────────────────────────────────────────────┐
-│                 React Hooks（第三层）                  │
-│         useMcpServer  /  useMcpClient                │
-│      （状态管理、自动连接、自动发现）                     │
-├─────────────────────────────────────────────────────┤
-│               协议层（第二层）                          │
-│         McpServer  /  McpClient                      │
-│      （JSON-RPC 2.0、MCP 方法、请求/响应）              │
-├─────────────────────────────────────────────────────┤
-│               传输层（第一层）                          │
-│  PostMessageServerTransport                          │
-│  PostMessageClientTransport                          │
-│      （原生 postMessage 封装、origin 校验）               │
-└─────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph hooks["React Hooks（第三层）"]
+        UseServer[useMcpServer<br>状态管理 / 自动连接]
+        UseClient[useMcpClient<br>状态管理 / 自动发现]
+    end
+
+    subgraph protocol["协议层（第二层）"]
+        McpSrv[McpServer<br>JSON-RPC 2.0 请求路由<br>Tool/Resource/Prompt 管理]
+        McpCli[McpClient<br>JSON-RPC 2.0 请求发送<br>30s 超时控制]
+    end
+
+    subgraph transport["传输层（第一层）"]
+        SrvTrans[PostMessageServerTransport<br>构造时启动监听<br>origin 白名单校验<br>握手协议处理]
+        CliTrans[PostMessageClientTransport<br>构造时启动监听<br>origin 白名单校验<br>握手协议处理]
+    end
+
+    subgraph browser["浏览器 API"]
+        PostMessage[window.postMessage]
+    end
+
+    UseServer --> McpSrv
+    UseClient --> McpCli
+    McpSrv --> SrvTrans
+    McpCli --> CliTrans
+    SrvTrans --> PostMessage
+    CliTrans --> PostMessage
 ```
 
 ### 第一层：传输层
 
 基于原生 `window.postMessage` API 封装，实现 `@modelcontextprotocol/sdk` 的 `Transport` 接口。
 
-- **PostMessageServerTransport** — 监听来自目标窗口（iframe 或父窗口）的消息。在 `start()` 时通过 `addEventListener('message')` 注册监听器。
-- **PostMessageClientTransport** — 向目标窗口发送消息。默认目标为 `window.parent`（普通 iframe 模式）。支持显式指定目标以启用反向模式。
+- **PostMessageServerTransport** — **构造时**即通过 `addEventListener('message')` 注册监听器，消息到达即处理，不依赖 `start()` 调用时机。
+- **PostMessageClientTransport** — 同上，构造时启动监听。默认目标为 `window.parent`（普通 iframe 模式）。支持显式指定目标以启用反向模式。
+- **握手机制** — 传输层内部处理 `__mcp_ready__` / `__mcp_ready_ack__` 握手消息。接收方通过 `event.source` 回复 ack，无需预先知道目标窗口引用。
 - **Origin 校验** — 通过 `isOriginAllowed()` 工具函数进行白名单校验，支持精确匹配、`*.domain` 通配符和 `https://*.domain` 通配符三种模式。当 `allowedOrigins` 为空或未定义时，允许所有来源。
 - **`createPostMessageListener()` / `sendPostMessage()`** — 原生 postMessage 工具函数，可在 Transport 类之外独立使用。
 
@@ -49,7 +62,7 @@
 在 JSON-RPC 2.0 之上实现 MCP 协议。
 
 - **McpServer** — 注册工具、资源和提示词及其处理函数。监听传入的 JSON-RPC 请求并分发至对应处理器。对未知方法返回 JSON-RPC 错误响应（`-32601`），对处理器异常返回 `-32000`。`initialize` 响应仅在至少注册了一项能力时才声明对应能力。
-- **McpClient** — 以递增 ID 发送 JSON-RPC 请求，通过 `Map<id, {resolve, reject}>` 将响应匹配到等待中的 Promise。每个请求强制 30 秒超时。连接时发送 MCP `initialize` 握手。
+- **McpClient** — 以递增 ID 发送 JSON-RPC 请求，通过 `Map<id, {resolve, reject}>` 将响应匹配到等待中的 Promise。每个请求强制 30 秒超时。`connect()` 在握手确认后再发送 MCP `initialize`。
 
 ### 第三层：React Hooks
 
@@ -58,42 +71,130 @@
 
 ---
 
+## 握手机制
+
+Transport 在构造函数中即启动 `message` 监听，确保不会因 `start()` 调用延迟而丢失消息。连接流程分为两个阶段：
+
+### 阶段一：Ready 握手
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant Server as MCP Server
+
+    Note over Client,Server: Transport 构造时已启动监听
+
+    Client->>Server: __mcp_ready__
+    Note over Server: 收到 ready<br>通过 event.source 回复 ack
+    Server->>Client: __mcp_ready_ack__
+    Note over Client: waitForReady() resolve
+
+    Note over Client,Server: 双方确认 ready，握手完成
+```
+
+- **Client** 发送 `__mcp_ready__` 后通过 `waitForReady()` 等待 ack
+- **Server** 收到 `__mcp_ready__` 后通过 `event.source.postMessage()` 回复 `__mcp_ready_ack__`，无需预先持有 Client 窗口引用
+- 若 Server 先发送 ready，Client 同样回复 ack，任意一端收到对方的 ready 或 ack 即认为握手完成
+
+### 阶段二：MCP 通信
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant Server as MCP Server
+
+    rect rgb(232, 240, 255)
+        Note over Client,Server: Ready 握手
+        Client->>Server: __mcp_ready__
+        Server->>Client: __mcp_ready_ack__
+    end
+
+    rect rgb(255, 245, 232)
+        Note over Client,Server: MCP 初始化
+        Client->>Server: initialize
+        Server->>Client: { capabilities, serverInfo }
+        Client->>Server: notifications/initialized
+    end
+
+    rect rgb(232, 255, 232)
+        Note over Client,Server: 能力发现
+        Client->>Server: tools/list
+        Server->>Client: [{ name, description, inputSchema }]
+        Client->>Server: resources/list
+        Server->>Client: [{ uri, name, mimeType }]
+        Client->>Server: prompts/list
+        Server->>Client: [{ name, description }]
+    end
+
+    rect rgb(255, 255, 232)
+        Note over Client,Server: 能力调用
+        Client->>Server: tools/call { name, arguments }
+        Server->>Client: { content: [...] }
+        Client->>Server: resources/read { uri }
+        Server->>Client: { contents: [...] }
+        Client->>Server: prompts/get { name, arguments }
+        Server->>Client: { messages: [...] }
+    end
+```
+
+---
+
 ## 通信流程
 
 ### 普通模式（主页面为 Server，iframe 为 Client）
 
-```
-┌──────────────────┐      postMessage           ┌──────────────────┐
-│     主页面        │ ◄───────────────────────► │     iframe       │
-│    (Server)      │                            │    (Client)      │
-│                  │  McpServer ◄── MCP ──►    │   McpClient      │
-│  useMcpServer()  │  注册 tools,               │  useMcpClient()  │
-│  指向 iframe     │  resources, prompts        │  指向 parent     │
-└──────────────────┘                            └──────────────────┘
-```
+```mermaid
+sequenceDiagram
+    participant Main as 主页面 (Server)
+    participant Iframe as iframe (Client)
 
-1. 主页面渲染 `<iframe src="/client.html">` 并创建指向它的 `McpServer`。
-2. iframe 加载完成，创建指向 `window.parent` 的 `McpClient`。
-3. Client 发送 `initialize` → Server 响应能力声明。
-4. Client 发送 `notifications/initialized`。
-5. Client 调用 `tools/list`、`resources/list`、`prompts/list` 发现能力。
-6. Client 调用 `tools/call`、`resources/read`、`prompts/get` 调用能力。
+    Main->>Main: 渲染 iframe
+    Main->>Main: useMcpServer() → McpServer 构造<br>→ Transport 构造时监听
+
+    Iframe->>Iframe: 页面加载 → React 挂载
+    Iframe->>Iframe: useMcpClient() → McpClient 构造<br>→ Transport 构造时监听
+
+    Iframe->>Main: __mcp_ready__
+    Main->>Iframe: __mcp_ready_ack__
+
+    Iframe->>Main: initialize
+    Main->>Iframe: { capabilities, serverInfo }
+    Iframe->>Main: notifications/initialized
+
+    Iframe->>Main: tools/list, resources/list, prompts/list
+    Main->>Iframe: 返回已注册的能力列表
+
+    Iframe->>Main: tools/call, resources/read, prompts/get
+    Main->>Iframe: 返回调用结果
+```
 
 ### 反向模式（iframe 为 Server，主页面为 Client）
 
-```
-┌──────────────────┐      postMessage           ┌──────────────────┐
-│     主页面        │ ◄───────────────────────► │     iframe       │
-│    (Client)      │                            │    (Server)      │
-│                  │  McpClient ◄── MCP ──►    │   McpServer      │
-│  useMcpClient()  │  指向 iframe               │  useMcpServer()  │
-│  iframeRef       │                            │  asIframe: true  │
-└──────────────────┘                            └──────────────────┘
-```
+```mermaid
+sequenceDiagram
+    participant Main as 主页面 (Client)
+    participant Iframe as iframe (Server)
 
-1. iframe 以 `asIframe: true` 创建 `McpServer`，目标为 `'parent'`。
-2. 主页面以 `iframeRef` 指向 iframe 元素创建 `McpClient`。
-3. 与普通模式相同的 MCP 握手流程，仅角色互换。
+    Main->>Main: 渲染 iframe
+    Iframe->>Iframe: 页面加载 → React 挂载
+    Iframe->>Iframe: useMcpServer({ asIframe: true })<br>→ Transport 构造时监听
+
+    Main->>Main: useMcpClient({ iframeRef })<br>→ 等待 iframe load 事件
+    Main->>Main: iframe load → connect()
+
+    Main->>Iframe: __mcp_ready__
+    Iframe->>Main: __mcp_ready_ack__
+
+    Main->>Iframe: initialize
+    Iframe->>Main: { capabilities, serverInfo }
+    Main->>Iframe: notifications/initialized
+
+    Main->>Iframe: tools/list, resources/list, prompts/list
+    Iframe->>Main: 返回已注册的能力列表
+
+    Main->>Iframe: tools/call, resources/read, prompts/get
+    Iframe->>Main: 返回调用结果
+```
 
 ---
 

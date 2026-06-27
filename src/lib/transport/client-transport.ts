@@ -9,7 +9,10 @@ import {
   type PostMessageListener,
   createPostMessageListener,
   sendPostMessage,
+  isReadyHandshake,
+  createReadyMessage,
 } from "./postmessage.js";
+import { MCP_READY_EVENT, MCP_READY_ACK_EVENT } from "./types.js";
 
 /**
  * 基于 PostMessage 的 Client Transport
@@ -27,6 +30,10 @@ export class PostMessageClientTransport implements Transport {
   private started = false;
   private isReverseMode = false;
 
+  // Ready handshake
+  private _readyPromise: Promise<void>;
+  private _readyResolve!: () => void;
+
   onmessage?: (message: JSONRPCMessage) => void;
   onerror?: (error: Error) => void;
   onclose?: () => void;
@@ -37,11 +44,48 @@ export class PostMessageClientTransport implements Transport {
     this.targetOrigin = options.targetOrigin ?? "*";
     this.allowedOrigins = options.allowedOrigins;
     // 如果明确指定了 target，则为反向模式
-    this.isReverseMode = !!(options.target && options.target !== window.parent);
+    this.isReverseMode = !!(
+      options.target && options.target !== window.parent
+    );
+
+    this._readyPromise = new Promise((resolve) => {
+      this._readyResolve = resolve;
+    });
+
+    // 立即设置消息监听，处理握手协议
+    this.setupListener();
   }
 
   /**
-   * 启动 Transport，开始监听消息
+   * 设置 postMessage 监听器（构造时即启动）
+   */
+  private setupListener(): void {
+    if (this.listener) {
+      this.listener.cancel();
+      this.listener = null;
+    }
+
+    this.listener = createPostMessageListener(
+      this.targetWindow,
+      this.allowedOrigins,
+      (data, _event) => {
+        if (isReadyHandshake(data)) {
+          const msg = data as { method: string };
+          if (msg.method === MCP_READY_ACK_EVENT || msg.method === MCP_READY_EVENT) {
+            this._readyResolve();
+          }
+          return;
+        }
+        // 非握手消息，转发给 MCP 协议层
+        if (this.started && this.onmessage) {
+          this.onmessage(data as JSONRPCMessage);
+        }
+      }
+    );
+  }
+
+  /**
+   * 启动 Transport（发送 ready）
    */
   async start(): Promise<void> {
     if (this.started) {
@@ -55,39 +99,31 @@ export class PostMessageClientTransport implements Transport {
       );
     }
 
-    // 清理可能存在的旧监听器
-    if (this.listener) {
-      try {
-        this.listener.cancel();
-      } catch (err) {
-        console.error("取消监听器失败:", err);
-      }
-      this.listener = null;
-    }
-
-    // 等待一小段时间，确保目标窗口的 Server 已经准备好监听
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
     try {
-      // 监听来自 Server 的消息
-      this.listener = createPostMessageListener(
-        this.targetWindow,
-        this.allowedOrigins,
-        (data) => {
-          if (this.onmessage) {
-            this.onmessage(data as JSONRPCMessage);
-          }
-        }
-      );
-
       this.started = true;
+
+      // 发送 ready 信号
+      sendPostMessage(
+        this.targetWindow,
+        createReadyMessage(MCP_READY_EVENT),
+        this.targetOrigin
+      );
     } catch (error) {
       this.started = false;
       if (this.onerror) {
-        this.onerror(error instanceof Error ? error : new Error(String(error)));
+        this.onerror(
+          error instanceof Error ? error : new Error(String(error))
+        );
       }
       throw error;
     }
+  }
+
+  /**
+   * 等待握手完成（对方确认 ready）
+   */
+  waitForReady(): Promise<void> {
+    return this._readyPromise;
   }
 
   /**
@@ -102,7 +138,9 @@ export class PostMessageClientTransport implements Transport {
       sendPostMessage(this.targetWindow, message, this.targetOrigin);
     } catch (error) {
       if (this.onerror) {
-        this.onerror(error instanceof Error ? error : new Error(String(error)));
+        this.onerror(
+          error instanceof Error ? error : new Error(String(error))
+        );
       }
       throw error;
     }
@@ -117,6 +155,11 @@ export class PostMessageClientTransport implements Transport {
       this.listener = null;
     }
     this.started = false;
+
+    // 重置 ready promise
+    this._readyPromise = new Promise((resolve) => {
+      this._readyResolve = resolve;
+    });
 
     if (this.onclose) {
       this.onclose();

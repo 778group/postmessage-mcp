@@ -72,7 +72,7 @@ export function isOriginAllowed(
 export function createPostMessageListener(
   targetWindow: Window | null,
   allowedOrigins: string[] | undefined,
-  onMessage: (data: unknown) => void
+  onMessage: (data: unknown, event: MessageEvent) => void
 ): PostMessageListener {
   const handler = (event: MessageEvent) => {
     // 校验 source
@@ -92,7 +92,7 @@ export function createPostMessageListener(
       return;
     }
 
-    onMessage(payload.data);
+    onMessage(payload.data, event);
   };
 
   window.addEventListener("message", handler);
@@ -102,6 +102,27 @@ export function createPostMessageListener(
       window.removeEventListener("message", handler);
     },
   };
+}
+
+/**
+ * 判断消息是否为握手消息
+ */
+export function isReadyHandshake(data: unknown): data is { method: string } {
+  const msg = data as Record<string, unknown> | undefined;
+  return (
+    typeof msg === "object" &&
+    msg !== null &&
+    (msg.method === "__mcp_ready__" || msg.method === "__mcp_ready_ack__")
+  );
+}
+
+/**
+ * 创建握手消息
+ */
+export function createReadyMessage(
+  type: string
+): { jsonrpc: string; method: string; params: Record<string, never> } {
+  return { jsonrpc: "2.0", method: type, params: {} };
 }
 
 /**

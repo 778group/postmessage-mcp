@@ -316,16 +316,12 @@ export function useMcpClient(
       if (!iframe) return;
 
       const handleLoad = () => {
-        setTimeout(() => {
-          connect().catch(console.error);
-        }, 0);
+        connect().catch(console.error);
       };
 
       // 如果 iframe 已经加载完成
       if (iframe.contentDocument?.readyState === "complete") {
-        setTimeout(() => {
-          connect().catch(console.error);
-        }, 0);
+        connect().catch(console.error);
       } else {
         iframe.addEventListener("load", handleLoad);
         return () => iframe.removeEventListener("load", handleLoad);

@@ -1,4 +1,4 @@
-import { type RefObject, useState } from "react";
+import { type RefObject, useEffect, useState } from "react";
 import { useMcpServer } from "./lib";
 import "./App.css";
 
@@ -28,7 +28,7 @@ function App({ iframeRef }: AppProps) {
   });
 
   // 注册示例工具
-  useState(() => {
+  useEffect(() => {
     // 计算器工具
     addTool({
       name: "calculator",
@@ -187,7 +187,7 @@ function App({ iframeRef }: AppProps) {
         };
       },
     });
-  });
+  }, [addTool, addResource, addPrompt]);
 
   return (
     <div className="server-app">

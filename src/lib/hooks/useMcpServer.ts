@@ -206,9 +206,7 @@ export function useMcpServer(options: UseMcpServerOptions): UseMcpServerReturn {
         console.warn("asIframe 模式需要在 iframe 中运行");
         return;
       }
-      setTimeout(() => {
-        connect().catch(console.error);
-      }, 0);
+      connect().catch(console.error);
       return;
     }
 
@@ -221,24 +219,18 @@ export function useMcpServer(options: UseMcpServerOptions): UseMcpServerReturn {
       const iframe = iframeRef.current;
 
       const handleLoad = () => {
-        setTimeout(() => {
-          connect().catch(console.error);
-        }, 0);
+        connect().catch(console.error);
       };
 
       // 如果 iframe 已经加载完成
       if (iframe.contentDocument?.readyState === "complete") {
-        setTimeout(() => {
-          connect().catch(console.error);
-        }, 0);
+        connect().catch(console.error);
       } else {
         iframe.addEventListener("load", handleLoad);
         return () => iframe.removeEventListener("load", handleLoad);
       }
     } else {
-      setTimeout(() => {
-        connect().catch(console.error);
-      }, 0);
+      connect().catch(console.error);
     }
   }, [autoConnect, connect, iframeRef, targetWindow, asIframe]);
 

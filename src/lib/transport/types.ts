@@ -15,6 +15,12 @@ export type McpMessage = JSONRPCMessage;
 export const MCP_MESSAGE_EVENT = "mcp-message";
 
 /**
+ * 握手事件名称
+ */
+export const MCP_READY_EVENT = "__mcp_ready__";
+export const MCP_READY_ACK_EVENT = "__mcp_ready_ack__";
+
+/**
  * Transport 状态
  */
 export type TransportState =

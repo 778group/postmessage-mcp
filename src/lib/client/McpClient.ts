@@ -91,6 +91,9 @@ export class McpClient {
 
       await this.transport.start();
 
+      // 等待握手确认 —— 确保 Server 已准备好接收 MCP 消息
+      await this.transport.waitForReady();
+
       // 检查 transport 是否还在（可能在 start() 过程中被 onerror/onclose 清理了）
       if (!this.transport) {
         throw new Error("Transport 启动失败");
