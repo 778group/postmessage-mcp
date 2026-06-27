@@ -1,5 +1,7 @@
 # PostMessage MCP
 
+[English](./README.en.md)
+
 基于 PostMessage 的 Model Context Protocol (MCP) 实现，支持 iframe 和窗口之间的双向通信。
 
 ## 特性
